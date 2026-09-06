@@ -36,7 +36,7 @@ const UserManagement = ({ role }) => {
   const [formError, setFormError] = useState('');
   const [creating, setCreating] = useState(false);
 
-  // Bulk Import state (Faculty only)
+  // Bulk Import state (Faculty and Student)
   const [importFile, setImportFile] = useState(null);
   const [importPreview, setImportPreview] = useState(null);
 
@@ -277,6 +277,55 @@ const UserManagement = ({ role }) => {
     document.body.removeChild(link);
   };
 
+  // --- Bulk Import (Student, flat / cross-class) Actions ---
+  // Unlike ManageClasses.jsx's per-class import, this page isn't scoped to one class, so
+  // each row must carry its own Department, Section, and Academic Year, and the target
+  // class must already exist (this does NOT create new departments/classes).
+  const handleParseStudentsFlat = async (e) => {
+    e.preventDefault();
+    if (!importFile) return setFormError('Please select a file');
+    setCreating(true);
+    setFormError('');
+    const fd = new FormData();
+    fd.append('file', importFile);
+    try {
+      const res = await adminService.parseStudents(fd);
+      setImportPreview(res.data.data.preview);
+    } catch (err) {
+      setFormError(err.response?.data?.message || 'Parsing failed.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleBulkStudentsFlat = async () => {
+    setCreating(true);
+    try {
+      // No classId here — each row supplies its own Department/Section/Academic Year,
+      // and the backend should resolve/validate against existing classes for each row.
+      await adminService.bulkStudents({ preview: importPreview });
+      setImportPreview(null);
+      setImportFile(null);
+      setShowImport(false);
+      fetchUsers();
+    } catch (err) {
+      setFormError(err.response?.data?.message || 'Import failed.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleDownloadStudentFlatTemplate = () => {
+    const csvContent = "data:text/csv;charset=utf-8,Name,Email,Registration Number,Mobile Number,Temporary Password,Department,Section,Academic Year\nJohn Doe,john@example.com,12345678,9876543210,temp123,CSE,A,2026-2027";
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "student_import_template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const title = role === 'faculty' ? 'Manage Faculty' : 'Manage Students';
 
   return (
@@ -288,11 +337,9 @@ const UserManagement = ({ role }) => {
             <p className="page-subtitle">{role === 'faculty' ? 'Add and manage faculty accounts' : 'Add and manage student accounts'}</p>
           </div>
           <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
-            {role === 'faculty' && (
-              <button className="btn btn-outline btn-capsule" onClick={() => setShowImport(true)}>
-                <Upload size={14} /> Bulk Import
-              </button>
-            )}
+            <button className="btn btn-outline btn-capsule" onClick={() => setShowImport(true)}>
+              <Upload size={14} /> Bulk Import
+            </button>
             <button className="btn btn-primary btn-capsule" onClick={() => setShowCreate(true)}>
               <UserPlus size={14} /> Add {role === 'faculty' ? 'Faculty' : 'Student'}
             </button>
@@ -525,21 +572,30 @@ const UserManagement = ({ role }) => {
         </div>
       )}
 
-      {/* Bulk Import Form (Faculty) */}
-      {showImport && role === 'faculty' && (
+      {/* Bulk Import Form (Faculty or Student) */}
+      {showImport && (
         <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
-          <div className="card-title" style={{ marginBottom: 'var(--space-4)' }}>Bulk Import Faculty</div>
+          <div className="card-title" style={{ marginBottom: 'var(--space-4)' }}>
+            Bulk Import {role === 'faculty' ? 'Faculty' : 'Students'}
+          </div>
           <ErrorMessage message={formError} />
 
           {!importPreview ? (
             <div>
               <p style={{ color: 'var(--color-muted)', marginBottom: 'var(--space-4)' }}>
-                Upload a CSV or Excel file containing columns: Name, Email, Temporary Password, Department.
+                {role === 'faculty'
+                  ? 'Upload a CSV or Excel file containing columns: Name, Email, Temporary Password, Department.'
+                  : 'Upload a CSV or Excel file containing columns: Name, Email, Registration Number, Mobile Number, Temporary Password, Department, Section, Academic Year. Each student\'s Department/Section/Academic Year must already exist under Manage Classes.'}
               </p>
-              <button type="button" className="btn btn-outline btn-capsule" style={{ marginBottom: 'var(--space-6)' }} onClick={handleDownloadFacultyTemplate}>
+              <button
+                type="button"
+                className="btn btn-outline btn-capsule"
+                style={{ marginBottom: 'var(--space-6)' }}
+                onClick={role === 'faculty' ? handleDownloadFacultyTemplate : handleDownloadStudentFlatTemplate}
+              >
                 <Download size={16} /> Download Template
               </button>
-              <form onSubmit={handleParseFaculty} style={{ maxWidth: 500 }}>
+              <form onSubmit={role === 'faculty' ? handleParseFaculty : handleParseStudentsFlat} style={{ maxWidth: 500 }}>
                 <div className="form-group">
                   <input type="file" className="form-input" accept=".csv,.xlsx,.xls" onChange={e => setImportFile(e.target.files[0])} required />
                 </div>
@@ -554,7 +610,7 @@ const UserManagement = ({ role }) => {
           ) : (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
-                <h3 style={{ margin: 0 }}>Preview Faculty</h3>
+                <h3 style={{ margin: 0 }}>Preview {role === 'faculty' ? 'Faculty' : 'Students'}</h3>
                 <div>
                   <Badge color="green">{importPreview.filter(s => s.isValid).length} Valid</Badge>
                   <span style={{ margin: '0 8px' }}></span>
@@ -568,7 +624,8 @@ const UserManagement = ({ role }) => {
                       <th>Status</th>
                       <th>Name</th>
                       <th>Email</th>
-                      <th>Dept</th>
+                      {role === 'student' && <th>Reg No</th>}
+                      <th>{role === 'faculty' ? 'Dept' : 'Dept/Sec/Year'}</th>
                       <th>Password</th>
                       <th>Errors</th>
                     </tr>
@@ -579,14 +636,15 @@ const UserManagement = ({ role }) => {
                         <td>{s.isValid ? <CheckCircle size={16} color="var(--color-success)" /> : <AlertCircle size={16} color="var(--color-danger)" />}</td>
                         <td>{s.name}</td>
                         <td>{s.email}</td>
-                        <td>{s.class}</td>
+                        {role === 'student' && <td>{s.registrationNumber}</td>}
+                        <td>{role === 'faculty' ? s.class : `${s.department || s.class || ''} / ${s.section || ''} / ${s.academicYear || ''}`}</td>
                         <td>{s.password}</td>
                         <td style={{ color: 'var(--color-danger)', fontSize: 'var(--text-xs)' }}>{s.errors.join(', ')}</td>
                       </tr>
                     ))}
                     {importPreview.length === 0 && (
                       <tr>
-                        <td colSpan="6" style={{ textAlign: 'center', padding: 'var(--space-4)' }}>No faculty found in file.</td>
+                        <td colSpan="7" style={{ textAlign: 'center', padding: 'var(--space-4)' }}>No {role === 'faculty' ? 'faculty' : 'students'} found in file.</td>
                       </tr>
                     )}
                   </tbody>
@@ -594,7 +652,11 @@ const UserManagement = ({ role }) => {
               </div>
 
               <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
-                <button className="btn btn-primary" onClick={handleBulkFaculty} disabled={creating || importPreview.filter(s => s.isValid).length === 0}>
+                <button
+                  className="btn btn-primary"
+                  onClick={role === 'faculty' ? handleBulkFaculty : handleBulkStudentsFlat}
+                  disabled={creating || importPreview.filter(s => s.isValid).length === 0}
+                >
                   {creating ? 'Saving...' : 'Confirm & Save'}
                 </button>
                 <button className="btn btn-ghost" onClick={() => { setImportPreview(null); setImportFile(null); }} disabled={creating}>Back</button>
