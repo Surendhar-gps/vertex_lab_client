@@ -22,7 +22,7 @@ const FacultyStudentProgress = () => {
 
   const handleSearch = async () => {
     if (!filters.class && !filters.section && !filters.academicYear && !filters.registrationNumber) {
-      setError('Please enter at least one filter (class, section, academic year, or registration number).');
+      setError('Please enter at least one filter (class, section, year of study, or registration number).');
       return;
     }
     setError('');
@@ -56,7 +56,7 @@ const FacultyStudentProgress = () => {
     <Layout title="Student Progress">
       <div className="page-header">
         <h1 className="page-title">Student Progress</h1>
-        <p className="page-subtitle">Filter by class, section and academic year to view student progress.</p>
+        <p className="page-subtitle">Filter by class, section and year of study to view student progress.</p>
       </div>
 
       {/* Filters */}
@@ -88,14 +88,14 @@ const FacultyStudentProgress = () => {
             </select>
           </div>
           <div className="form-group">
-            <label className="form-label">Academic Year</label>
+            <label className="form-label">Year of Study</label>
             <select
               className="form-input"
               value={filters.academicYear}
               onChange={(e) => setFilters((f) => ({ ...f, academicYear: e.target.value }))}
             >
               <option value="">All Years</option>
-              {filterOptions.academicYears?.map(y => <option key={y} value={y}>{y}</option>)}
+              {filterOptions.academicYears?.map(y => <option key={y} value={y}>{y} Year</option>)}
             </select>
           </div>
           <div className="form-group">
@@ -133,7 +133,7 @@ const FacultyStudentProgress = () => {
             <div className="card">
               <EmptyState
                 title="No students found"
-                text="No students match the selected filters. Try adjusting the class, section, or academic year."
+                text="No students match the selected filters. Try adjusting the class, section, or year of study."
               />
             </div>
           ) : (
@@ -168,7 +168,7 @@ const FacultyStudentProgress = () => {
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
                       <div style={{ textAlign: 'right', fontSize: 'var(--text-xs)', color: 'var(--color-muted)' }}>
-                        {student.academicYear || ''}
+                        {student.academicYear ? `${student.academicYear} Year` : ''}
                       </div>
                       <ChevronRight size={16} color="var(--color-muted)" />
                     </div>

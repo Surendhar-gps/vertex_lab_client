@@ -14,7 +14,9 @@ const CreateLab = () => {
     topic: '',
     class: '',
     section: '',
-    academicYear: '',
+    academicYear: '', // NOTE: kept as-is for backend compatibility.
+    // Represents "Year of Study" (I/II/III/IV),
+    // matches admin's ManageClasses.jsx naming.
   });
   const [errors, setErrors] = useState({});
   const [apiError, setApiError] = useState('');
@@ -27,7 +29,7 @@ const CreateLab = () => {
         console.log('[DEBUG] CreateLab fetched classes:', data);
         setClasses(data);
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setClassesLoading(false));
   }, []);
 
@@ -40,7 +42,7 @@ const CreateLab = () => {
     ? classes.filter((c) => c.department === form.class && c.section === form.section)
     : [];
 
-  // When class changes, reset section/year/reg range
+  // When class changes, reset section/year
   const handleClassChange = (dept) => {
     setForm((p) => ({
       ...p,
@@ -50,19 +52,15 @@ const CreateLab = () => {
     }));
   };
 
-  // When section changes, reset year/reg range
+  // When section changes, reset year
   const handleSectionChange = (sec) => {
     setForm((p) => ({ ...p, section: sec, academicYear: '' }));
   };
 
-  // When year changes, auto-fill reg range from the matching class record
+  // When year changes, just store the selected value
   const handleYearChange = (year) => {
-    const matchingClass = classes.find(
-      (c) => c.department === form.class && c.section === form.section && c.academicYear === year
-    );
     setForm((p) => ({
       ...p,
-      academicYear: year,
       academicYear: year,
     }));
   };
@@ -191,15 +189,15 @@ const CreateLab = () => {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Academic Year</label>
+                    <label className="form-label">Year of Study</label>
                     <select
                       className="form-select"
                       value={form.academicYear}
                       onChange={(e) => handleYearChange(e.target.value)}
                       disabled={!form.section}
                     >
-                      <option value="">Select academic year...</option>
-                      {yearsForDeptSection.map((c) => <option key={c._id} value={c.academicYear}>{c.academicYear}</option>)}
+                      <option value="">Select year of study...</option>
+                      {yearsForDeptSection.map((c) => <option key={c._id} value={c.academicYear}>{c.academicYear} Year</option>)}
                     </select>
                   </div>
 

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Plus, ChevronRight, BookOpen, Calendar, Edit, Trash2 } from 'lucide-react';
+import { Plus, ChevronRight, BookOpen, Calendar, Edit, Trash2, Eye, EyeOff } from 'lucide-react';
 import Layout from '../../components/Layout';
-import { LoadingSpinner, ErrorMessage } from '../../components/UI';
+import { LoadingSpinner, ErrorMessage, Badge } from '../../components/UI';
 import { labService, experimentService } from '../../services/index';
 
 const FacultyLabDetail = () => {
@@ -18,6 +18,8 @@ const FacultyLabDetail = () => {
   const [editingExpId, setEditingExpId] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [publishLoading, setPublishLoading] = useState(false);
+  const [expPublishLoadingId, setExpPublishLoadingId] = useState(null);
 
   const fetchData = async () => {
     try {
@@ -85,6 +87,42 @@ const FacultyLabDetail = () => {
     }
   };
 
+  const handleTogglePublishLab = async () => {
+    if (!lab) return;
+    const willPublish = !lab.isPublished;
+    if (willPublish && experiments.length === 0) {
+      alert('Add at least one weekly experiment before publishing this lab.');
+      return;
+    }
+    setPublishLoading(true);
+    try {
+      await labService.publishLab(labId, { publish: willPublish });
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to update publish status.');
+    } finally {
+      setPublishLoading(false);
+    }
+  };
+
+  const handleToggleExpPublish = async (exp, e) => {
+    e.stopPropagation();
+    const willPublish = !exp.isPublished;
+    if (willPublish && (!exp.questionCount || exp.questionCount === 0)) {
+      alert('Add at least one question before publishing this week.');
+      return;
+    }
+    setExpPublishLoadingId(exp._id);
+    try {
+      await experimentService.publish(exp._id, { publish: willPublish });
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to update publish status.');
+    } finally {
+      setExpPublishLoadingId(null);
+    }
+  };
+
   if (loading) return <Layout title="Lab"><LoadingSpinner /></Layout>;
 
   return (
@@ -98,7 +136,12 @@ const FacultyLabDetail = () => {
       <div className="page-header">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <h1 className="page-title">{lab?.title}</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+              <h1 className="page-title" style={{ margin: 0 }}>{lab?.title}</h1>
+              <Badge color={lab?.isPublished ? 'green' : 'yellow'}>
+                {lab?.isPublished ? 'Published' : 'Draft'}
+              </Badge>
+            </div>
             <p className="page-subtitle">{lab?.topic} · {lab?.class} — Section {lab?.section}</p>
             {lab?.regNoFrom && (
               <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-muted)', marginTop: 4 }}>
@@ -113,6 +156,19 @@ const FacultyLabDetail = () => {
             <button className="btn btn-outline" onClick={() => navigate(`/faculty/labs/${labId}/edit`)}>
               <Edit size={14} /> Edit Lab
             </button>
+            <button
+              className={`btn btn-capsule ${lab?.isPublished ? 'btn-outline' : 'btn-primary'}`}
+              onClick={handleTogglePublishLab}
+              disabled={publishLoading}
+            >
+              {publishLoading ? (
+                <LoadingSpinner size={16} />
+              ) : lab?.isPublished ? (
+                <><EyeOff size={14} /> Unpublish Lab</>
+              ) : (
+                <><Eye size={14} /> Publish Lab</>
+              )}
+            </button>
             <button className="btn btn-primary btn-capsule" onClick={() => {
               setEditingExpId(null);
               setExpForm({ weekNumber: experiments.length + 1, title: '', description: '', instructions: '', dueDate: '' });
@@ -122,6 +178,11 @@ const FacultyLabDetail = () => {
             </button>
           </div>
         </div>
+        {!lab?.isPublished && (
+          <div className="alert alert-info" style={{ marginTop: 'var(--space-4)' }}>
+            This lab is a draft and is not visible to students yet. Publish it once you've finished setting up experiments and questions.
+          </div>
+        )}
       </div>
 
       {/* Create experiment form */}
@@ -192,6 +253,9 @@ const FacultyLabDetail = () => {
                       WEEK {exp.weekNumber}
                     </span>
                     <span style={{ fontWeight: 500, fontSize: 'var(--text-sm)' }}>{exp.title}</span>
+                    <Badge color={exp.isPublished ? 'green' : 'yellow'}>
+                      {exp.isPublished ? 'Published' : 'Draft'}
+                    </Badge>
                   </div>
                   <div style={{ display: 'flex', gap: 'var(--space-5)', fontSize: 'var(--text-xs)', color: 'var(--color-muted)' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -204,7 +268,20 @@ const FacultyLabDetail = () => {
                     )}
                   </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+                  <button
+                    className={`btn btn-sm ${exp.isPublished ? 'btn-outline' : 'btn-primary'}`}
+                    onClick={(e) => handleToggleExpPublish(exp, e)}
+                    disabled={expPublishLoadingId === exp._id}
+                  >
+                    {expPublishLoadingId === exp._id ? (
+                      <LoadingSpinner size={14} />
+                    ) : exp.isPublished ? (
+                      <><EyeOff size={13} /> Unpublish</>
+                    ) : (
+                      <><Eye size={13} /> Publish</>
+                    )}
+                  </button>
                   <button className="btn btn-ghost btn-sm" onClick={(e) => handleEditExpClick(exp, e)}>
                     <Edit size={14} /> Edit
                   </button>
@@ -215,14 +292,14 @@ const FacultyLabDetail = () => {
           ))}
         </div>
       )}
-    {/* Delete Lab Modal */}
+      {/* Delete Lab Modal */}
       {showDeleteModal && (
         <div className="modal-overlay">
           <div className="modal-content card" style={{ maxWidth: 400 }}>
             <h3 className="card-title" style={{ color: 'var(--color-danger)', marginBottom: 'var(--space-3)' }}>Delete Lab?</h3>
             <p style={{ marginBottom: 'var(--space-5)' }}>
-              Are you sure you want to delete <br/>
-              <strong>&quot;{lab?.title}&quot;</strong>?<br/><br/>
+              Are you sure you want to delete <br />
+              <strong>&quot;{lab?.title}&quot;</strong>?<br /><br />
               This action will remove the lab and its associated weekly experiments, questions, and submission data.
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-3)' }}>

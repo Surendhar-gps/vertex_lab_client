@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import Layout from '../../components/Layout';
-import { LoadingSpinner } from '../../components/UI';
+import { LoadingSpinner, Badge } from '../../components/UI';
 import { labService } from '../../services/index';
 
 const FacultyLabsList = () => {
@@ -49,6 +49,7 @@ const FacultyLabsList = () => {
                 <th>Class</th>
                 <th>Reg Range</th>
                 <th>Experiments</th>
+                <th>Status</th>
                 <th>Action</th>
               </tr>
             </thead>
@@ -62,6 +63,11 @@ const FacultyLabsList = () => {
                     {lab.regNoFrom && lab.regNoTo ? `${lab.regNoFrom} → ${lab.regNoTo}` : 'All students'}
                   </td>
                   <td>{lab.experimentCount || 0}</td>
+                  <td>
+                    <Badge color={lab.isPublished ? 'green' : 'gray'}>
+                      {lab.isPublished ? 'Published' : 'Unpublished'}
+                    </Badge>
+                  </td>
                   <td>
                     <button className="btn btn-outline btn-sm" onClick={() => navigate(`/faculty/labs/${lab._id}`)}>
                       Manage

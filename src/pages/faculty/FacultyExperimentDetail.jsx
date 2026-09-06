@@ -1,10 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Plus, Trash2, Upload, Download, CheckCircle, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Edit2, Upload, Download, CheckCircle, AlertCircle } from 'lucide-react';
 import Layout from '../../components/Layout';
 import FileUpload from '../../components/FileUpload';
 import { LoadingSpinner, ErrorMessage, Badge } from '../../components/UI';
 import { experimentService, problemService } from '../../services/index';
+
+const emptyQForm = {
+  title: '', description: '', instructions: '', marks: 1, type: 'mcq',
+  mcqOptions: [{ text: '' }, { text: '' }, { text: '' }, { text: '' }],
+  mcqCorrectAnswer: 0
+};
 
 const FacultyExperimentDetail = () => {
   const { experimentId } = useParams();
@@ -13,13 +19,10 @@ const FacultyExperimentDetail = () => {
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Single Question Add Form
+  // Single Question Add/Edit Form
   const [showAddQ, setShowAddQ] = useState(false);
-  const [qForm, setQForm] = useState({
-    title: '', description: '', instructions: '', marks: 1, type: 'mcq',
-    mcqOptions: [{ text: '' }, { text: '' }, { text: '' }, { text: '' }],
-    mcqCorrectAnswer: 0
-  });
+  const [editingQuestion, setEditingQuestion] = useState(null); // the question being edited, or null when adding
+  const [qForm, setQForm] = useState(emptyQForm);
   const [answerKeyFile, setAnswerKeyFile] = useState(null);
   const [qError, setQError] = useState('');
   const [qLoading, setQLoading] = useState(false);
@@ -43,7 +46,41 @@ const FacultyExperimentDetail = () => {
 
   useEffect(() => { fetchData(); }, [experimentId]);
 
-  const handleAddQuestion = async (e) => {
+  const closeQuestionForm = () => {
+    setShowAddQ(false);
+    setEditingQuestion(null);
+    setQForm(emptyQForm);
+    setAnswerKeyFile(null);
+    setQError('');
+  };
+
+  const handleOpenAddForm = (sectionType) => {
+    setEditingQuestion(null);
+    setQForm({ ...emptyQForm, type: sectionType || 'mcq' });
+    setAnswerKeyFile(null);
+    setQError('');
+    setShowAddQ(true);
+  };
+
+  const handleOpenEditForm = (q) => {
+    setEditingQuestion(q);
+    setQForm({
+      title: q.title || '',
+      description: q.description || '',
+      instructions: q.instructions || '',
+      marks: q.marks || 1,
+      type: q.type || 'mcq',
+      mcqOptions: (q.type === 'mcq' && Array.isArray(q.mcqOptions) && q.mcqOptions.length === 4)
+        ? q.mcqOptions.map((o) => ({ text: o.text || '' }))
+        : [{ text: '' }, { text: '' }, { text: '' }, { text: '' }],
+      mcqCorrectAnswer: typeof q.mcqCorrectAnswer === 'number' ? q.mcqCorrectAnswer : 0
+    });
+    setAnswerKeyFile(null);
+    setQError('');
+    setShowAddQ(true);
+  };
+
+  const handleSubmitQuestion = async (e) => {
     e.preventDefault();
     if (!qForm.title) { setQError('Question title is required.'); return; }
 
@@ -51,9 +88,11 @@ const FacultyExperimentDetail = () => {
     setQError('');
 
     const formData = new FormData();
-    formData.append('weeklyExperiment', experimentId);
-    formData.append('lab', experiment.lab?._id || experiment.lab);
-    formData.append('questionNumber', questions.length + 1);
+    if (!editingQuestion) {
+      formData.append('weeklyExperiment', experimentId);
+      formData.append('lab', experiment.lab?._id || experiment.lab);
+      formData.append('questionNumber', questions.length + 1);
+    }
     formData.append('title', qForm.title);
     formData.append('description', qForm.description);
     formData.append('instructions', qForm.instructions);
@@ -68,17 +107,15 @@ const FacultyExperimentDetail = () => {
     if (derivedFormat === 'cad' && answerKeyFile) formData.append('answerKeyFile', answerKeyFile);
 
     try {
-      await problemService.create(formData);
-      setShowAddQ(false);
-      setQForm({
-        title: '', description: '', instructions: '', marks: 1, type: 'mcq',
-        mcqOptions: [{ text: '' }, { text: '' }, { text: '' }, { text: '' }],
-        mcqCorrectAnswer: 0
-      });
-      setAnswerKeyFile(null);
+      if (editingQuestion) {
+        await problemService.update(editingQuestion._id, formData);
+      } else {
+        await problemService.create(formData);
+      }
+      closeQuestionForm();
       fetchData();
     } catch (err) {
-      setQError(err.response?.data?.message || 'Failed to add question.');
+      setQError(err.response?.data?.message || `Failed to ${editingQuestion ? 'update' : 'add'} question.`);
     } finally {
       setQLoading(false);
     }
@@ -131,7 +168,7 @@ const FacultyExperimentDetail = () => {
   };
 
   const handleDownloadQuestionTemplate = () => {
-    const csvContent = "data:text/csv;charset=utf-8,Section Type,Title,Description,Instructions,Marks,Option 1,Option 2,Option 3,Option 4,Correct Option Index\nMCQ,What is AutoCAD?,Basic question,,2,Software,Hardware,Both,None,1\nSkill Enhancer,Draw a line,Draw a 50mm line,Save as DXF,5,,,,,";
+    const csvContent = "data:text/csv;charset=utf-8,Section Type,Title,Description,Instructions,Marks,Option 1,Option 2,Option 3,Option 4,Correct Option Index\nMCQ,What is AutoCAD?,Basic question,,2,Software,Hardware,Both,None,1\nSkill Enhancer,Draw a line,Draw a 50mm line,Save as DXF,5,,,,,\nPractice by Yourself,Draw a hexagon,Draw a regular hexagon inscribed in a circle of radius 50mm,Save as DXF,10,,,,,";
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -170,13 +207,22 @@ const FacultyExperimentDetail = () => {
             </a>
           )}
         </div>
-        <button
-          className="btn btn-danger btn-sm btn-icon"
-          onClick={() => handleDeleteQuestion(q._id)}
-          title="Delete question"
-        >
-          <Trash2 size={16} />
-        </button>
+        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+          <button
+            className="btn btn-outline btn-sm btn-icon"
+            onClick={() => handleOpenEditForm(q)}
+            title="Edit question"
+          >
+            <Edit2 size={16} />
+          </button>
+          <button
+            className="btn btn-danger btn-sm btn-icon"
+            onClick={() => handleDeleteQuestion(q._id)}
+            title="Delete question"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -209,7 +255,7 @@ const FacultyExperimentDetail = () => {
             <button className="btn btn-outline btn-capsule" onClick={() => setShowBulkImport(true)}>
               <Upload size={14} /> Bulk Import Questions
             </button>
-            <button className="btn btn-primary btn-capsule" onClick={() => setShowAddQ(!showAddQ)}>
+            <button className="btn btn-primary btn-capsule" onClick={() => handleOpenAddForm('mcq')}>
               <Plus size={14} /> Add Question
             </button>
           </div>
@@ -294,10 +340,12 @@ const FacultyExperimentDetail = () => {
 
       {showAddQ && (
         <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
-          <div className="card-title" style={{ marginBottom: 'var(--space-4)' }}>New Question</div>
+          <div className="card-title" style={{ marginBottom: 'var(--space-4)' }}>
+            {editingQuestion ? 'Edit Question' : 'New Question'}
+          </div>
           <ErrorMessage message={qError} />
 
-          <form onSubmit={handleAddQuestion}>
+          <form onSubmit={handleSubmitQuestion}>
             <div className="grid-2">
               <div className="form-group">
                 <label className="form-label">Type</label>
@@ -350,14 +398,19 @@ const FacultyExperimentDetail = () => {
               <div className="form-group">
                 <label className="form-label">Reference Answer File (DXF) - Optional</label>
                 <FileUpload accept=".dxf" onChange={setAnswerKeyFile} />
+                {editingQuestion?.answerKeyFileUrl && !answerKeyFile && (
+                  <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-muted)', marginTop: 4 }}>
+                    Leave blank to keep the existing answer key file.
+                  </p>
+                )}
               </div>
             )}
 
             <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-4)' }}>
               <button type="submit" className="btn btn-primary" disabled={qLoading}>
-                {qLoading ? <LoadingSpinner size={16} /> : 'Save Question'}
+                {qLoading ? <LoadingSpinner size={16} /> : (editingQuestion ? 'Save Changes' : 'Save Question')}
               </button>
-              <button type="button" className="btn btn-ghost" onClick={() => setShowAddQ(false)}>Cancel</button>
+              <button type="button" className="btn btn-ghost" onClick={closeQuestionForm}>Cancel</button>
             </div>
           </form>
         </div>
@@ -372,7 +425,7 @@ const FacultyExperimentDetail = () => {
           <div key={sectionType} style={{ marginBottom: 'var(--space-8)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
               <h3 style={{ margin: 0, fontSize: 'var(--text-lg)' }}>{sectionTitle}</h3>
-              <button className="btn btn-outline btn-sm btn-capsule" onClick={() => { setQForm({ ...qForm, type: sectionType }); setShowAddQ(true); }}>
+              <button className="btn btn-outline btn-sm btn-capsule" onClick={() => handleOpenAddForm(sectionType)}>
                 <Plus size={14} /> Add {sectionType === 'mcq' ? 'MCQ' : 'Question'}
               </button>
             </div>

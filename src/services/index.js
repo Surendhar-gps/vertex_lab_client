@@ -77,6 +77,10 @@ export const labService = {
 
   createExperiment: (labId, data) =>
     api.post(`/labs/${labId}/experiments`, data),
+
+  // Publish/unpublish a whole lab — students should only see labs where isPublished === true.
+  publishLab: (labId, data) =>
+    api.put(`/labs/${labId}/publish`, data),
 };
 
 
@@ -109,6 +113,11 @@ export const experimentService = {
         ? { studentId }
         : {},
     }),
+
+  // Publish/unpublish a single weekly experiment — students should only see weeks where
+  // isPublished === true, even if the parent lab itself is already published.
+  publish: (experimentId, data) =>
+    api.put(`/experiments/${experimentId}/publish`, data),
 };
 
 

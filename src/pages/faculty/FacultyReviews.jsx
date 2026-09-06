@@ -22,7 +22,7 @@ const FacultyReviews = () => {
 
   const handleSearch = async () => {
     if (!filters.class && !filters.section && !filters.academicYear && !filters.registrationNumber) {
-      setError('Please enter at least one filter (class, section, academic year, or registration number).');
+      setError('Please enter at least one filter (class, section, year of study, or registration number).');
       return;
     }
     setError('');
@@ -86,14 +86,14 @@ const FacultyReviews = () => {
             </select>
           </div>
           <div className="form-group">
-            <label className="form-label">Academic Year</label>
+            <label className="form-label">Year of Study</label>
             <select
               className="form-input"
               value={filters.academicYear}
               onChange={(e) => setFilters((f) => ({ ...f, academicYear: e.target.value }))}
             >
               <option value="">All Years</option>
-              {filterOptions.academicYears?.map(y => <option key={y} value={y}>{y}</option>)}
+              {filterOptions.academicYears?.map(y => <option key={y} value={y}>{y} Year</option>)}
             </select>
           </div>
           <div className="form-group">
