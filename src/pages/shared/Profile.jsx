@@ -66,11 +66,11 @@ const Profile = () => {
         <form onSubmit={handleSubmit}>
           <div style={{ display: 'flex', gap: 'var(--space-6)', alignItems: 'center', marginBottom: 'var(--space-6)' }}>
             <div style={{ position: 'relative' }}>
-              <Avatar 
-                user={file ? { ...user, avatarUrl: URL.createObjectURL(file) } : user} 
-                size={80} 
+              <Avatar
+                user={file ? { ...user, avatarUrl: URL.createObjectURL(file) } : user}
+                size={80}
               />
-              <label 
+              <label
                 style={{
                   position: 'absolute',
                   bottom: -4,
@@ -88,11 +88,11 @@ const Profile = () => {
                 }}
               >
                 <Camera size={14} />
-                <input 
-                  type="file" 
-                  accept="image/*" 
-                  style={{ display: 'none' }} 
-                  onChange={handleFileChange} 
+                <input
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={handleFileChange}
                 />
               </label>
             </div>
@@ -130,6 +130,20 @@ const Profile = () => {
               placeholder="Enter mobile number"
             />
           </div>
+
+          {user?.role === 'faculty' && (
+            <div className="form-group">
+              <label className="form-label">Department</label>
+              <input
+                type="text"
+                className="form-input"
+                value={user.class || ''}
+                disabled
+                style={{ backgroundColor: 'var(--color-bg-tertiary)', cursor: 'not-allowed' }}
+              />
+              <div className="form-hint">Contact admin to change this.</div>
+            </div>
+          )}
 
           {user?.role === 'student' && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)' }}>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Users, ChevronRight, ArrowLeft, Upload, Download, CheckCircle, AlertCircle, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Edit2, Users, ChevronRight, ArrowLeft, Upload, Download, CheckCircle, AlertCircle, AlertTriangle } from 'lucide-react';
 import Layout from '../../components/Layout';
 import { LoadingSpinner, ErrorMessage, Badge } from '../../components/UI';
 import { adminService } from '../../services/index';
@@ -22,15 +22,22 @@ const ManageClasses = () => {
   const [combinedPreview, setCombinedPreview] = useState(null);
 
   // Level 2: Class Creation
+  const YEAR_LEVELS = ['I', 'II', 'III', 'IV'];
   const [showCreateClass, setShowCreateClass] = useState(false);
   const [classForm, setClassForm] = useState({ section: '', academicYear: '' });
 
   // Level 3: Student Tabs
   const [studentTab, setStudentTab] = useState('list'); // 'list', 'quick', 'import'
-  const [addStudentForm, setAddStudentForm] = useState({ registrationNumber: '', email: '', password: '' });
+  const [addStudentForm, setAddStudentForm] = useState({ name: '', registrationNumber: '', email: '', password: '' });
   const [studentImportFile, setStudentImportFile] = useState(null);
   const [studentImportPreview, setStudentImportPreview] = useState(null);
   const [deleteStudentModal, setDeleteStudentModal] = useState(null);
+
+  // Level 3: Student Edit
+  const [editStudent, setEditStudent] = useState(null); // student currently being edited, or null
+  const [editForm, setEditForm] = useState({});
+  const [editError, setEditError] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -132,7 +139,7 @@ const ManageClasses = () => {
   };
 
   const handleDownloadCombinedTemplate = () => {
-    const csvContent = "data:text/csv;charset=utf-8,Department,Section,Academic Year,Name,Email,Registration Number,Mobile Number,Temporary Password\nCSE,A,2023-2024,John Doe,john@example.com,12345678,9876543210,temp123";
+    const csvContent = "data:text/csv;charset=utf-8,Department,Section,Year of Study (I/II/III/IV),Name,Email,Registration Number,Mobile Number,Temporary Password\nCSE,A,I,John Doe,john@example.com,12345678,9876543210,temp123";
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -146,7 +153,10 @@ const ManageClasses = () => {
   const handleCreateClass = async (e) => {
     e.preventDefault();
     if (!classForm.section || !classForm.academicYear) {
-      return setFormError('Section and Academic Year are required.');
+      return setFormError('Section and Year of Study are required.');
+    }
+    if (!YEAR_LEVELS.includes(classForm.academicYear)) {
+      return setFormError('Year of Study must be one of I, II, III, IV.');
     }
     setSubmitting(true);
     setFormError('');
@@ -178,11 +188,15 @@ const ManageClasses = () => {
   // --- Level 3 Actions (Students) ---
   const handleQuickAddStudent = async (e) => {
     e.preventDefault();
+    if (!addStudentForm.name) {
+      setFormError('Name is required.');
+      return;
+    }
     setSubmitting(true);
     setFormError('');
     try {
       await adminService.addStudentToClass(selectedClass._id, addStudentForm);
-      setAddStudentForm({ registrationNumber: '', email: '', password: '' });
+      setAddStudentForm({ name: '', registrationNumber: '', email: '', password: '' });
       setStudentTab('list');
       fetchStudentsForClass(selectedClass);
     } catch (err) {
@@ -212,6 +226,43 @@ const ManageClasses = () => {
     }
   };
 
+  // --- Level 3 Actions (Student Edit) ---
+  const openEditStudentModal = (student) => {
+    setEditError('');
+    setEditStudent(student);
+    setEditForm({
+      name: student.name || '',
+      email: student.email || '',
+      registrationNumber: student.registrationNumber || '',
+      mobileNumber: student.mobileNumber || '',
+    });
+  };
+
+  const handleEditFieldChange = (field) => (e) => {
+    const val = e.target.value;
+    setEditForm((p) => ({ ...p, [field]: val }));
+  };
+
+  const handleSaveStudentEdit = async (e) => {
+    e.preventDefault();
+    if (!editStudent) return;
+    if (!editForm.name || !editForm.email) {
+      setEditError('Name and email are required.');
+      return;
+    }
+    setSavingEdit(true);
+    setEditError('');
+    try {
+      await adminService.updateUser(editStudent._id, editForm);
+      setEditStudent(null);
+      fetchStudentsForClass(selectedClass);
+    } catch (err) {
+      setEditError(err.response?.data?.message || 'Failed to update.');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   // Class-level bulk import
   const handleParseStudents = async (e) => {
     e.preventDefault();
@@ -220,6 +271,7 @@ const ManageClasses = () => {
     setFormError('');
     const fd = new FormData();
     fd.append('file', studentImportFile);
+    fd.append('classId', selectedClass._id); // FIX: backend requires classId during parse step too
     try {
       const res = await adminService.parseStudents(fd);
       setStudentImportPreview(res.data.data.preview);
@@ -290,6 +342,47 @@ const ManageClasses = () => {
         </div>
       )}
 
+      {/* Edit Modal for Student */}
+      {editStudent && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 'var(--space-4)'
+        }} onClick={() => !savingEdit && setEditStudent(null)}>
+          <div className="card" style={{ maxWidth: 500, width: '100%', padding: 'var(--space-8)', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+            <div className="card-title" style={{ marginBottom: 'var(--space-6)' }}>
+              Edit Student
+            </div>
+
+            <ErrorMessage message={editError} />
+
+            <form onSubmit={handleSaveStudentEdit}>
+              <div className="form-group">
+                <label className="form-label">Name</label>
+                <input type="text" className="form-input" value={editForm.name || ''} onChange={handleEditFieldChange('name')} required />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Email</label>
+                <input type="email" className="form-input" value={editForm.email || ''} onChange={handleEditFieldChange('email')} required />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Registration Number</label>
+                <input type="text" className="form-input" value={editForm.registrationNumber || ''} onChange={handleEditFieldChange('registrationNumber')} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Mobile Number</label>
+                <input type="text" className="form-input" value={editForm.mobileNumber || ''} onChange={handleEditFieldChange('mobileNumber')} />
+              </div>
+
+              <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-6)' }}>
+                <button type="submit" className="btn btn-primary" disabled={savingEdit}>
+                  {savingEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button type="button" className="btn btn-ghost" onClick={() => setEditStudent(null)} disabled={savingEdit}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
 
       {/* Breadcrumbs */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-6)' }}>
@@ -308,7 +401,7 @@ const ManageClasses = () => {
           <>
             <ChevronRight size={20} color="var(--color-muted)" />
             <h2 className="page-title" style={{ margin: 0, fontSize: 'var(--text-lg)' }}>
-              {selectedClass.section} ({selectedClass.academicYear})
+              {selectedClass.section} (Year of Study: {selectedClass.academicYear})
             </h2>
           </>
         )}
@@ -437,7 +530,7 @@ const ManageClasses = () => {
                       <th>Name</th>
                       <th>Email</th>
                       <th>Reg No</th>
-                      <th>Dept/Sec/Year</th>
+                      <th>Dept/Sec/Year of Study</th>
                       <th>Password</th>
                       <th>Errors</th>
                     </tr>
@@ -495,8 +588,13 @@ const ManageClasses = () => {
                     <input type="text" className="form-input" placeholder="e.g. A" value={classForm.section} onChange={e => setClassForm({ ...classForm, section: e.target.value })} required />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Academic Year</label>
-                    <input type="text" className="form-input" placeholder="e.g. 2023-2024" value={classForm.academicYear} onChange={e => setClassForm({ ...classForm, academicYear: e.target.value })} required />
+                    <label className="form-label">Year of Study <span className="form-required">*</span></label>
+                    <select className="form-input" value={classForm.academicYear} onChange={e => setClassForm({ ...classForm, academicYear: e.target.value })} required>
+                      <option value="">Select Year of Study</option>
+                      {YEAR_LEVELS.map((y) => (
+                        <option key={y} value={y}>{y} Year</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
@@ -514,7 +612,7 @@ const ManageClasses = () => {
               <div key={cls._id} className="card card-sm" style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={() => setSelectedClass(cls)}>
                 <div>
                   <div style={{ fontSize: 'var(--text-xl)', fontWeight: 600 }}>{cls.section}</div>
-                  <div style={{ color: 'var(--color-muted)', fontSize: 'var(--text-sm)' }}>{cls.academicYear}</div>
+                  <div style={{ color: 'var(--color-muted)', fontSize: 'var(--text-sm)' }}>Year of Study: {cls.academicYear}</div>
                 </div>
                 <button className="btn btn-sm btn-danger btn-icon" onClick={(e) => { e.stopPropagation(); handleDeleteClass(cls._id); }} title="Delete Class">
                   <Trash2 size={16} />
@@ -566,6 +664,9 @@ const ManageClasses = () => {
                       </td>
                       <td style={{ textAlign: 'right' }}>
                         <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
+                          <button className="btn btn-sm btn-outline btn-icon" onClick={() => openEditStudentModal(student)} title="Edit details">
+                            <Edit2 size={16} />
+                          </button>
                           <button className={`btn btn-sm ${student.isActive ? 'btn-danger' : 'btn-success'}`} onClick={() => handleToggleStudent(student)}>
                             {student.isActive ? 'Disable' : 'Enable'}
                           </button>
@@ -591,6 +692,10 @@ const ManageClasses = () => {
           {studentTab === 'quick' && (
             <form onSubmit={handleQuickAddStudent} style={{ maxWidth: 500 }}>
               <div className="form-group">
+                <label className="form-label">Name <span className="form-required">*</span></label>
+                <input type="text" className="form-input" value={addStudentForm.name} onChange={e => setAddStudentForm({ ...addStudentForm, name: e.target.value })} required />
+              </div>
+              <div className="form-group">
                 <label className="form-label">Email <span className="form-required">*</span></label>
                 <input type="email" className="form-input" value={addStudentForm.email} onChange={e => setAddStudentForm({ ...addStudentForm, email: e.target.value })} required />
               </div>
@@ -611,7 +716,7 @@ const ManageClasses = () => {
           {studentTab === 'import' && !studentImportPreview && (
             <div>
               <p style={{ color: 'var(--color-muted)', marginBottom: 'var(--space-4)' }}>
-                Upload a CSV or Excel file to add students strictly to <strong>{selectedDepartment.name} - {selectedClass.section} ({selectedClass.academicYear})</strong>.
+                Upload a CSV or Excel file to add students strictly to <strong>{selectedDepartment.name} - {selectedClass.section} (Year of Study: {selectedClass.academicYear})</strong>.
               </p>
               <button type="button" className="btn btn-outline btn-capsule" style={{ marginBottom: 'var(--space-6)' }} onClick={handleDownloadStudentTemplate}>
                 <Download size={16} /> Download Template

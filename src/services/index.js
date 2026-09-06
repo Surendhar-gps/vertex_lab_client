@@ -38,9 +38,10 @@ export const authService = {
   // ─────────────────────────────────────────────────────────────
 
   // Send password reset email
-  forgotPassword: (email) =>
+  forgotPassword: (email, role) =>
     api.post('/auth/forgot-password', {
       email,
+      role,
     }),
 
   // Reset password using token from email

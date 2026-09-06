@@ -4,6 +4,9 @@ import Layout from '../../components/Layout';
 import { ErrorMessage, Badge } from '../../components/UI';
 import { adminService } from '../../services/index';
 
+// Fixed academic-year options — matches the backend Class model's enum (I/II/III/IV).
+const YEAR_OPTIONS = ['I', 'II', 'III', 'IV'];
+
 const UserManagement = ({ role }) => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,7 +28,7 @@ const UserManagement = ({ role }) => {
   const [saving, setSaving] = useState(false);
 
   // Faculty form state
-  const [facultyForm, setFacultyForm] = useState({ name: '', email: '', password: '', role: 'faculty' });
+  const [facultyForm, setFacultyForm] = useState({ name: '', email: '', password: '', role: 'faculty', class: '' });
 
   // Student form state (extended)
   const [studentForm, setStudentForm] = useState({
@@ -40,21 +43,15 @@ const UserManagement = ({ role }) => {
   const [importFile, setImportFile] = useState(null);
   const [importPreview, setImportPreview] = useState(null);
 
-  // Derived dropdown options for student form (create)
+  // Derived dropdown options (department list is used by both faculty and student forms)
   const departments = [...new Set(classes.map((c) => c.department))].sort();
   const sectionsForDept = studentForm.class
     ? classes.filter((c) => c.department === studentForm.class)
-    : [];
-  const yearsForDeptSection = (studentForm.class && studentForm.section)
-    ? classes.filter((c) => c.department === studentForm.class && c.section === studentForm.section)
     : [];
 
   // Derived dropdown options for edit form (student)
   const editSectionsForDept = editForm.class
     ? classes.filter((c) => c.department === editForm.class)
-    : [];
-  const editYearsForDeptSection = (editForm.class && editForm.section)
-    ? classes.filter((c) => c.department === editForm.class && c.section === editForm.section)
     : [];
 
   const fetchUsers = () => {
@@ -71,11 +68,12 @@ const UserManagement = ({ role }) => {
   useEffect(() => { fetchUsers(); }, [role]);
 
   useEffect(() => {
-    if (role === 'student') {
-      adminService.getClasses()
-        .then((res) => setClasses(res.data.data.classes || []))
-        .catch(() => { });
-    }
+    // Needed for both roles now: faculty uses it for the Department dropdown,
+    // student uses it for Department / Section. Year of Study is now a fixed
+    // I/II/III/IV list (YEAR_OPTIONS) rather than derived from existing classes.
+    adminService.getClasses()
+      .then((res) => setClasses(res.data.data.classes || []))
+      .catch(() => { });
   }, [role]);
 
   const handleSearch = (e) => {
@@ -89,12 +87,16 @@ const UserManagement = ({ role }) => {
       setFormError('Email and password are required.');
       return;
     }
+    if (!facultyForm.class) {
+      setFormError('Department is required.');
+      return;
+    }
     setCreating(true);
     setFormError('');
     try {
       await adminService.createUser(facultyForm);
       setShowCreate(false);
-      setFacultyForm({ name: '', email: '', password: '', role: 'faculty' });
+      setFacultyForm({ name: '', email: '', password: '', role: 'faculty', class: '' });
       fetchUsers();
     } catch (err) {
       setFormError(err.response?.data?.message || 'Failed to create faculty.');
@@ -107,6 +109,10 @@ const UserManagement = ({ role }) => {
     e.preventDefault();
     if (!studentForm.name || !studentForm.email || !studentForm.password) {
       setFormError('Name, email, and password are required.');
+      return;
+    }
+    if (studentForm.academicYear && !YEAR_OPTIONS.includes(studentForm.academicYear)) {
+      setFormError('Year of Study must be I, II, III, or IV.');
       return;
     }
     setCreating(true);
@@ -151,6 +157,7 @@ const UserManagement = ({ role }) => {
       setEditForm({
         name: user.name || '',
         email: user.email || '',
+        class: user.class || '',
       });
     } else {
       setEditForm({
@@ -168,8 +175,8 @@ const UserManagement = ({ role }) => {
   const handleEditFieldChange = (field) => (e) => {
     const val = e.target.value;
     setEditForm((p) => ({ ...p, [field]: val }));
-    if (field === 'class') setEditForm((p) => ({ ...p, class: val, section: '', academicYear: '' }));
-    if (field === 'section') setEditForm((p) => ({ ...p, section: val, academicYear: '' }));
+    if (role === 'student' && field === 'class') setEditForm((p) => ({ ...p, class: val, section: '', academicYear: '' }));
+    if (role === 'student' && field === 'section') setEditForm((p) => ({ ...p, section: val, academicYear: '' }));
   };
 
   const handleSaveEdit = async (e) => {
@@ -177,6 +184,14 @@ const UserManagement = ({ role }) => {
     if (!editUser) return;
     if (!editForm.name || !editForm.email) {
       setEditError('Name and email are required.');
+      return;
+    }
+    if (role === 'faculty' && !editForm.class) {
+      setEditError('Department is required.');
+      return;
+    }
+    if (role === 'student' && editForm.academicYear && !YEAR_OPTIONS.includes(editForm.academicYear)) {
+      setEditError('Year of Study must be I, II, III, or IV.');
       return;
     }
     setSaving(true);
@@ -279,7 +294,7 @@ const UserManagement = ({ role }) => {
 
   // --- Bulk Import (Student, flat / cross-class) Actions ---
   // Unlike ManageClasses.jsx's per-class import, this page isn't scoped to one class, so
-  // each row must carry its own Department, Section, and Academic Year, and the target
+  // each row must carry its own Department, Section, and Year of Study, and the target
   // class must already exist (this does NOT create new departments/classes).
   const handleParseStudentsFlat = async (e) => {
     e.preventDefault();
@@ -301,7 +316,7 @@ const UserManagement = ({ role }) => {
   const handleBulkStudentsFlat = async () => {
     setCreating(true);
     try {
-      // No classId here — each row supplies its own Department/Section/Academic Year,
+      // No classId here — each row supplies its own Department/Section/Year of Study,
       // and the backend should resolve/validate against existing classes for each row.
       await adminService.bulkStudents({ preview: importPreview });
       setImportPreview(null);
@@ -316,7 +331,7 @@ const UserManagement = ({ role }) => {
   };
 
   const handleDownloadStudentFlatTemplate = () => {
-    const csvContent = "data:text/csv;charset=utf-8,Name,Email,Registration Number,Mobile Number,Temporary Password,Department,Section,Academic Year\nJohn Doe,john@example.com,12345678,9876543210,temp123,CSE,A,2026-2027";
+    const csvContent = "data:text/csv;charset=utf-8,Name,Email,Registration Number,Mobile Number,Temporary Password,Department,Section,Year of Study (I/II/III/IV)\nJohn Doe,john@example.com,12345678,9876543210,temp123,CSE,A,I";
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -421,6 +436,18 @@ const UserManagement = ({ role }) => {
                 <input type="email" className="form-input" value={editForm.email || ''} onChange={handleEditFieldChange('email')} required />
               </div>
 
+              {role === 'faculty' && (
+                <div className="form-group">
+                  <label className="form-label">Department</label>
+                  <select className="form-input" value={editForm.class || ''} onChange={handleEditFieldChange('class')} required>
+                    <option value="">Select Department</option>
+                    {departments.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {role === 'student' && (
                 <>
                   <div className="form-group">
@@ -454,11 +481,11 @@ const UserManagement = ({ role }) => {
                     </div>
 
                     <div className="form-group">
-                      <label className="form-label">Academic Year</label>
+                      <label className="form-label">Year of Study</label>
                       <select className="form-input" value={editForm.academicYear || ''} onChange={handleEditFieldChange('academicYear')} disabled={!editForm.section}>
                         <option value="">Select Year</option>
-                        {[...new Set(editYearsForDeptSection.map((c) => c.academicYear))].map((y) => (
-                          <option key={y} value={y}>{y}</option>
+                        {YEAR_OPTIONS.map((y) => (
+                          <option key={y} value={y}>{y} Year</option>
                         ))}
                       </select>
                     </div>
@@ -495,6 +522,15 @@ const UserManagement = ({ role }) => {
               <div className="form-group">
                 <label className="form-label">Email</label>
                 <input type="email" className="form-input" value={facultyForm.email} onChange={(e) => setFacultyForm({ ...facultyForm, email: e.target.value })} required />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Department</label>
+                <select className="form-input" value={facultyForm.class} onChange={(e) => setFacultyForm({ ...facultyForm, class: e.target.value })} required>
+                  <option value="">Select Department</option>
+                  {departments.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
               </div>
               <div className="form-group">
                 <label className="form-label">Temporary Password</label>
@@ -552,11 +588,11 @@ const UserManagement = ({ role }) => {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Academic Year</label>
+                  <label className="form-label">Year of Study</label>
                   <select className="form-input" value={studentForm.academicYear} onChange={handleStudentFieldChange('academicYear')} disabled={!studentForm.section} required>
                     <option value="">Select Year</option>
-                    {[...new Set(yearsForDeptSection.map((c) => c.academicYear))].map((y) => (
-                      <option key={y} value={y}>{y}</option>
+                    {YEAR_OPTIONS.map((y) => (
+                      <option key={y} value={y}>{y} Year</option>
                     ))}
                   </select>
                 </div>
@@ -585,7 +621,7 @@ const UserManagement = ({ role }) => {
               <p style={{ color: 'var(--color-muted)', marginBottom: 'var(--space-4)' }}>
                 {role === 'faculty'
                   ? 'Upload a CSV or Excel file containing columns: Name, Email, Temporary Password, Department.'
-                  : 'Upload a CSV or Excel file containing columns: Name, Email, Registration Number, Mobile Number, Temporary Password, Department, Section, Academic Year. Each student\'s Department/Section/Academic Year must already exist under Manage Classes.'}
+                  : 'Upload a CSV or Excel file containing columns: Name, Email, Registration Number, Mobile Number, Temporary Password, Department, Section, Year of Study (I/II/III/IV). Each student\'s Department/Section/Year of Study must already exist under Manage Classes.'}
               </p>
               <button
                 type="button"
@@ -725,7 +761,7 @@ const UserManagement = ({ role }) => {
                     )}
                     {role === 'student' && (
                       <td>
-                        {user.class ? `${user.class} - ${user.section} (${user.academicYear})` : '-'}
+                        {user.class ? `${user.class} - ${user.section} (Year of Study: ${user.academicYear})` : '-'}
                       </td>
                     )}
                     <td>

@@ -6,6 +6,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 // Auth Pages
 import { StudentLogin, FacultyLogin, AdminLogin } from './pages/auth/LoginPages';
 import ProfileSetup from './pages/auth/ProfileSetup';
+import ResetPassword from './pages/auth/ResetPassword';
 
 // Student Pages
 import StudentDashboard from './pages/student/StudentDashboard';
@@ -54,6 +55,11 @@ const App = () => {
             <Route path="/student/login" element={<StudentLogin />} />
             <Route path="/faculty/login" element={<FacultyLogin />} />
             <Route path="/admin/login" element={<AdminLogin />} />
+
+            {/* Reached via the reset link emailed by /auth/forgot-password.
+                Unauthenticated by definition — a user who forgot their password
+                can't log in yet, so this must stay outside ProtectedRoute. */}
+            <Route path="/reset-password/:token" element={<ResetPassword />} />
 
             {/* ─── Student Profile Setup (legacy for admin-pre-created accounts) */}
             <Route

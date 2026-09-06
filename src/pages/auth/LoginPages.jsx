@@ -5,6 +5,9 @@ import { useAuth } from '../../context/AuthContext';
 import { authService, adminService } from '../../services/index';
 import { ErrorMessage } from '../../components/UI';
 
+// Fixed academic-year options — matches the backend Class model's enum (I/II/III/IV).
+const YEAR_OPTIONS = ['I', 'II', 'III', 'IV'];
+
 // ─────────────────────────────────────────────────────────────
 // BRAND
 // ─────────────────────────────────────────────────────────────
@@ -120,10 +123,7 @@ const ForgotPassword = ({ role, roleLabel, onBack }) => {
        * }
        */
 
-      await authService.forgotPassword({
-        email: cleanEmail,
-        role,
-      });
+      await authService.forgotPassword(cleanEmail, role);
 
       setSuccess(
         `If an account exists for this email, a password reset link has been sent to ${cleanEmail}. Please check your inbox.`
@@ -891,17 +891,8 @@ const StudentRegistrationForm = ({
       )
       : [];
 
-  const yearsForDeptSection =
-    selectedClass?.department &&
-      selectedClass?.section
-      ? classes.filter(
-        (c) =>
-          c.department ===
-          selectedClass.department &&
-          c.section ===
-          selectedClass.section
-      )
-      : [];
+  // Year of Study is now the fixed I/II/III/IV list (YEAR_OPTIONS) rather than
+  // derived from which years happen to have an existing class for this Dept+Section.
 
   const handleChange =
     (field) => (e) => {
@@ -995,6 +986,14 @@ const StudentRegistrationForm = ({
     ) {
       e.mobileNumber =
         'Enter a valid 10-digit mobile number.';
+    }
+
+    if (
+      form.academicYear &&
+      !YEAR_OPTIONS.includes(form.academicYear)
+    ) {
+      e.academicYear =
+        'Year of Study must be I, II, III, or IV.';
     }
 
     return e;
@@ -1151,8 +1150,8 @@ const StudentRegistrationForm = ({
             <input
               type="text"
               className={`form-input${errors.name
-                  ? ' error'
-                  : ''
+                ? ' error'
+                : ''
                 }`}
               placeholder="e.g., Arun Sharma"
               value={form.name}
@@ -1198,8 +1197,8 @@ const StudentRegistrationForm = ({
             <input
               type="email"
               className={`form-input${errors.email
-                  ? ' error'
-                  : ''
+                ? ' error'
+                : ''
                 }`}
               value={form.email}
               onChange={handleChange(
@@ -1254,8 +1253,8 @@ const StudentRegistrationForm = ({
                     : 'password'
                 }
                 className={`form-input${errors.password
-                    ? ' error'
-                    : ''
+                  ? ' error'
+                  : ''
                   }`}
                 placeholder="Min. 6 characters"
                 value={form.password}
@@ -1335,8 +1334,8 @@ const StudentRegistrationForm = ({
               <input
                 type="text"
                 className={`form-input${errors.registrationNumber
-                    ? ' error'
-                    : ''
+                  ? ' error'
+                  : ''
                   }`}
                 placeholder="e.g., CSE001"
                 value={
@@ -1372,8 +1371,8 @@ const StudentRegistrationForm = ({
               <input
                 type="tel"
                 className={`form-input${errors.mobileNumber
-                    ? ' error'
-                    : ''
+                  ? ' error'
+                  : ''
                   }`}
                 placeholder="10-digit number"
                 value={
@@ -1482,11 +1481,14 @@ const StudentRegistrationForm = ({
                 textAlign: 'left',
               }}
             >
-              Academic Year
+              Year of Study
             </label>
 
             <select
-              className="form-select"
+              className={`form-select${errors.academicYear
+                ? ' error'
+                : ''
+                }`}
               value={
                 form.academicYear
               }
@@ -1498,24 +1500,26 @@ const StudentRegistrationForm = ({
               }
             >
               <option value="">
-                Select academic year...
+                Select year of study...
               </option>
 
-              {yearsForDeptSection.map(
-                (c) => (
+              {YEAR_OPTIONS.map(
+                (y) => (
                   <option
-                    key={c._id}
-                    value={
-                      c.academicYear
-                    }
+                    key={y}
+                    value={y}
                   >
-                    {
-                      c.academicYear
-                    }
+                    {y} Year
                   </option>
                 )
               )}
             </select>
+
+            {errors.academicYear && (
+              <span className="form-error">
+                {errors.academicYear}
+              </span>
+            )}
           </div>
 
           {/* BUTTONS */}
