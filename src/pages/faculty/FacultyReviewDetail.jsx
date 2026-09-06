@@ -84,7 +84,7 @@ const FacultyReviewDetail = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
                 {lab.experiments.map((exp) => (
                   <div key={exp._id} className="card card-sm">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-1)' }}>
                           <span style={{
@@ -100,32 +100,40 @@ const FacultyReviewDetail = () => {
                           <span>{exp.completedQuestions}/{exp.totalQuestions} Questions Submitted</span>
                           {exp.finalSubmission && (
                             <span style={{
-                              color: exp.finalSubmission.status === 'evaluated' ? 'var(--color-success)' : 
-                                     exp.finalSubmission.status === 'reviewed' ? 'var(--color-success)' : 'var(--color-warning)',
+                              color: exp.finalSubmission.status === 'evaluated' ? 'var(--color-success)' :
+                                exp.finalSubmission.status === 'reviewed' ? 'var(--color-success)' : 'var(--color-warning)',
                               fontWeight: 500,
                             }}>
                               {exp.finalSubmission.status === 'reviewed' ? '✓ Reviewed' :
-                               exp.finalSubmission.status === 'evaluated' ? '⟳ Needs Review' : 
-                               exp.finalSubmission.status === 'evaluating' ? '⟳ Evaluating' : '✓ Submitted'}
+                                exp.finalSubmission.status === 'evaluated' ? '⟳ Needs Review' :
+                                  exp.finalSubmission.status === 'evaluating' ? '⟳ Evaluating' : '✓ Submitted'}
                             </span>
                           )}
                         </div>
                       </div>
-                      
-                      <button 
-                        className="btn btn-outline" 
-                        onClick={() => {
-                          if (exp.finalSubmission) {
-                            navigate(`/faculty/review/${exp.finalSubmission._id}`);
-                          } else {
-                            // Can't review if they haven't submitted the final
-                            alert('Student has not submitted this week for evaluation yet.');
-                          }
-                        }}
-                        disabled={!exp.finalSubmission}
-                      >
-                        Review
-                      </button>
+
+                      {/* Per-question review buttons — each links to that question's own
+                          Submission._id, which is what the backend's GET /submissions/:id
+                          actually looks up. (Previously this linked to exp.finalSubmission._id,
+                          which is an ExperimentSubmission._id from a different collection,
+                          so the review page always showed "Submission not found".) */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', alignItems: 'flex-end' }}>
+                        {exp.submissions && exp.submissions.length > 0 ? (
+                          exp.submissions.map((sub) => (
+                            <button
+                              key={sub._id}
+                              className="btn btn-outline btn-sm"
+                              onClick={() => navigate(`/faculty/review/${sub._id}`)}
+                            >
+                              Review {sub.problem?.questionNumber ? `Q${sub.problem.questionNumber}` : ''}
+                            </button>
+                          ))
+                        ) : (
+                          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-muted)' }}>
+                            No question submissions yet.
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
