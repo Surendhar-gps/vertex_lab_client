@@ -397,7 +397,10 @@ const FacultyExperimentDetail = () => {
             {qForm.type !== 'mcq' && (
               <div className="form-group">
                 <label className="form-label">Reference Answer File (DXF) - Optional</label>
-                <FileUpload accept=".dxf" onChange={setAnswerKeyFile} />
+                <FileUpload
+                  onFileSelect={setAnswerKeyFile}
+                  currentFile={editingQuestion?.answerKeyFileUrl ? editingQuestion.answerKeyFileUrl.split('/').pop() : null}
+                />
                 {editingQuestion?.answerKeyFileUrl && !answerKeyFile && (
                   <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-muted)', marginTop: 4 }}>
                     Leave blank to keep the existing answer key file.
