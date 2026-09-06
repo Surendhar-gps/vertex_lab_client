@@ -14,6 +14,7 @@ const UserManagement = ({ role }) => {
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [classes, setClasses] = useState([]);
+  const [departmentsList, setDepartmentsList] = useState([]); // real Department records (not just those with classes)
   const [deleteModalUser, setDeleteModalUser] = useState(null);
 
   // Bulk selection state
@@ -43,8 +44,10 @@ const UserManagement = ({ role }) => {
   const [importFile, setImportFile] = useState(null);
   const [importPreview, setImportPreview] = useState(null);
 
-  // Derived dropdown options (department list is used by both faculty and student forms)
-  const departments = [...new Set(classes.map((c) => c.department))].sort();
+  // Derived dropdown options (department list is used by both faculty and student forms).
+  // Sourced from the actual Department records (departmentsList), not from classes —
+  // a department admin just created has no classes yet and must still show up here.
+  const departments = [...new Set(departmentsList.map((d) => d.name))].sort();
   const sectionsForDept = studentForm.class
     ? classes.filter((c) => c.department === studentForm.class)
     : [];
@@ -73,6 +76,11 @@ const UserManagement = ({ role }) => {
     // I/II/III/IV list (YEAR_OPTIONS) rather than derived from existing classes.
     adminService.getClasses()
       .then((res) => setClasses(res.data.data.classes || []))
+      .catch(() => { });
+    // Departments are fetched separately from classes so a freshly created
+    // department (with no classes under it yet) still appears in the dropdown.
+    adminService.getDepartments()
+      .then((res) => setDepartmentsList(res.data.data.departments || []))
       .catch(() => { });
   }, [role]);
 

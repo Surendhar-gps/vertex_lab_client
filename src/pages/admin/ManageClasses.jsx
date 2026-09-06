@@ -26,6 +26,16 @@ const ManageClasses = () => {
   const [showCreateClass, setShowCreateClass] = useState(false);
   const [classForm, setClassForm] = useState({ section: '', academicYear: '' });
 
+  // Level 2: Department sub-tab (Classes vs Faculty) and Faculty data
+  const [deptSectionTab, setDeptSectionTab] = useState('classes'); // 'classes' | 'faculty'
+  const [faculty, setFaculty] = useState([]);
+  const [facultyLoading, setFacultyLoading] = useState(false);
+  const [deleteFacultyModal, setDeleteFacultyModal] = useState(null);
+  const [editFaculty, setEditFaculty] = useState(null); // faculty member currently being edited, or null
+  const [facultyEditForm, setFacultyEditForm] = useState({});
+  const [facultyEditError, setFacultyEditError] = useState('');
+  const [savingFacultyEdit, setSavingFacultyEdit] = useState(false);
+
   // Level 3: Student Tabs
   const [studentTab, setStudentTab] = useState('list'); // 'list', 'quick', 'import'
   const [addStudentForm, setAddStudentForm] = useState({ name: '', registrationNumber: '', email: '', password: '' });
@@ -65,6 +75,14 @@ const ManageClasses = () => {
       .finally(() => setLoading(false));
   };
 
+  const fetchFacultyForDept = (dept) => {
+    setFacultyLoading(true);
+    adminService.getUsers({ role: 'faculty', class: dept.name })
+      .then(res => setFaculty(res.data.data.users || []))
+      .catch(console.error)
+      .finally(() => setFacultyLoading(false));
+  };
+
   useEffect(() => {
     fetchDepartments();
     fetchClasses();
@@ -75,6 +93,13 @@ const ManageClasses = () => {
       fetchStudentsForClass(selectedClass);
     }
   }, [selectedClass]);
+
+  useEffect(() => {
+    if (selectedDepartment) {
+      setDeptSectionTab('classes');
+      fetchFacultyForDept(selectedDepartment);
+    }
+  }, [selectedDepartment]);
 
   // --- Level 1 Actions (Departments) ---
   const handleCreateDepartment = async (e) => {
@@ -185,6 +210,61 @@ const ManageClasses = () => {
     }
   };
 
+  // --- Level 2 Actions (Faculty in this department) ---
+  const handleToggleFaculty = async (member) => {
+    try {
+      await adminService.updateUser(member._id, { isActive: !member.isActive });
+      fetchFacultyForDept(selectedDepartment);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Update failed.');
+    }
+  };
+
+  const handleDeleteFaculty = async () => {
+    if (!deleteFacultyModal) return;
+    try {
+      await adminService.deleteUser(deleteFacultyModal._id);
+      setDeleteFacultyModal(null);
+      fetchFacultyForDept(selectedDepartment);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Delete failed.');
+    }
+  };
+
+  const openEditFacultyModal = (member) => {
+    setFacultyEditError('');
+    setEditFaculty(member);
+    setFacultyEditForm({
+      name: member.name || '',
+      email: member.email || '',
+    });
+  };
+
+  const handleFacultyEditFieldChange = (field) => (e) => {
+    const val = e.target.value;
+    setFacultyEditForm((p) => ({ ...p, [field]: val }));
+  };
+
+  const handleSaveFacultyEdit = async (e) => {
+    e.preventDefault();
+    if (!editFaculty) return;
+    if (!facultyEditForm.name || !facultyEditForm.email) {
+      setFacultyEditError('Name and email are required.');
+      return;
+    }
+    setSavingFacultyEdit(true);
+    setFacultyEditError('');
+    try {
+      await adminService.updateUser(editFaculty._id, facultyEditForm);
+      setEditFaculty(null);
+      fetchFacultyForDept(selectedDepartment);
+    } catch (err) {
+      setFacultyEditError(err.response?.data?.message || 'Failed to update.');
+    } finally {
+      setSavingFacultyEdit(false);
+    }
+  };
+
   // --- Level 3 Actions (Students) ---
   const handleQuickAddStudent = async (e) => {
     e.preventDefault();
@@ -271,7 +351,6 @@ const ManageClasses = () => {
     setFormError('');
     const fd = new FormData();
     fd.append('file', studentImportFile);
-    fd.append('classId', selectedClass._id); // FIX: backend requires classId during parse step too
     try {
       const res = await adminService.parseStudents(fd);
       setStudentImportPreview(res.data.data.preview);
@@ -377,6 +456,65 @@ const ManageClasses = () => {
                   {savingEdit ? 'Saving...' : 'Save Changes'}
                 </button>
                 <button type="button" className="btn btn-ghost" onClick={() => setEditStudent(null)} disabled={savingEdit}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+
+      {/* Delete Confirmation Modal for Faculty */}
+      {deleteFacultyModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 'var(--space-4)'
+        }} onClick={() => setDeleteFacultyModal(null)}>
+          <div className="card" style={{ maxWidth: 400, width: '100%', padding: 'var(--space-8)' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-start', marginBottom: 'var(--space-5)' }}>
+              <div style={{ width: 40, height: 40, borderRadius: 'var(--border-radius)', background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <AlertTriangle size={18} color="var(--color-danger)" />
+              </div>
+              <div>
+                <h3 style={{ margin: '0 0 var(--space-1) 0', fontSize: 'var(--text-lg)' }}>Delete Faculty</h3>
+                <p style={{ margin: 0, color: 'var(--color-muted)', fontSize: 'var(--text-sm)', lineHeight: 1.5 }}>
+                  Are you sure you want to permanently delete <strong>{deleteFacultyModal.name}</strong>? This action cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'flex-end' }}>
+              <button className="btn btn-ghost" onClick={() => setDeleteFacultyModal(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={handleDeleteFaculty}>Yes, delete account</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal for Faculty */}
+      {editFaculty && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 'var(--space-4)'
+        }} onClick={() => !savingFacultyEdit && setEditFaculty(null)}>
+          <div className="card" style={{ maxWidth: 500, width: '100%', padding: 'var(--space-8)', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+            <div className="card-title" style={{ marginBottom: 'var(--space-6)' }}>
+              Edit Faculty
+            </div>
+
+            <ErrorMessage message={facultyEditError} />
+
+            <form onSubmit={handleSaveFacultyEdit}>
+              <div className="form-group">
+                <label className="form-label">Name</label>
+                <input type="text" className="form-input" value={facultyEditForm.name || ''} onChange={handleFacultyEditFieldChange('name')} required />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Email</label>
+                <input type="email" className="form-input" value={facultyEditForm.email || ''} onChange={handleFacultyEditFieldChange('email')} required />
+              </div>
+
+              <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-6)' }}>
+                <button type="submit" className="btn btn-primary" disabled={savingFacultyEdit}>
+                  {savingFacultyEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button type="button" className="btn btn-ghost" onClick={() => setEditFaculty(null)} disabled={savingFacultyEdit}>Cancel</button>
               </div>
             </form>
           </div>
@@ -567,62 +705,124 @@ const ManageClasses = () => {
         </div>
       )}
 
-      {/* --- LEVEL 2: CLASSES --- */}
+      {/* --- LEVEL 2: CLASSES / FACULTY --- */}
       {selectedDepartment && !selectedClass && (
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
-            <h3 style={{ margin: 0 }}>Classes in {selectedDepartment.name}</h3>
-            <button className="btn btn-primary btn-capsule" onClick={() => setShowCreateClass(!showCreateClass)}>
-              <Plus size={16} /> Create Class
-            </button>
+          <div className="tabs" style={{ marginBottom: 'var(--space-4)', display: 'flex', gap: 'var(--space-4)', borderBottom: '1px solid var(--color-border)' }}>
+            <button className={`btn btn-ghost ${deptSectionTab === 'classes' ? 'active' : ''}`} onClick={() => setDeptSectionTab('classes')} style={{ borderBottom: deptSectionTab === 'classes' ? '2px solid var(--color-primary)' : 'none', borderRadius: 0 }}>Classes</button>
+            <button className={`btn btn-ghost ${deptSectionTab === 'faculty' ? 'active' : ''}`} onClick={() => setDeptSectionTab('faculty')} style={{ borderBottom: deptSectionTab === 'faculty' ? '2px solid var(--color-primary)' : 'none', borderRadius: 0 }}>Faculty ({faculty.length})</button>
           </div>
 
-          {showCreateClass && (
-            <div className="card" style={{ marginBottom: 'var(--space-4)' }}>
-              <div className="card-title" style={{ marginBottom: 'var(--space-4)' }}>New Class</div>
-              <ErrorMessage message={formError} />
-              <form onSubmit={handleCreateClass}>
-                <div className="grid-2">
-                  <div className="form-group">
-                    <label className="form-label">Section</label>
-                    <input type="text" className="form-input" placeholder="e.g. A" value={classForm.section} onChange={e => setClassForm({ ...classForm, section: e.target.value })} required />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Year of Study <span className="form-required">*</span></label>
-                    <select className="form-input" value={classForm.academicYear} onChange={e => setClassForm({ ...classForm, academicYear: e.target.value })} required>
-                      <option value="">Select Year of Study</option>
-                      {YEAR_LEVELS.map((y) => (
-                        <option key={y} value={y}>{y} Year</option>
-                      ))}
-                    </select>
-                  </div>
+          {deptSectionTab === 'classes' && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
+                <h3 style={{ margin: 0 }}>Classes in {selectedDepartment.name}</h3>
+                <button className="btn btn-primary btn-capsule" onClick={() => setShowCreateClass(!showCreateClass)}>
+                  <Plus size={16} /> Create Class
+                </button>
+              </div>
+
+              {showCreateClass && (
+                <div className="card" style={{ marginBottom: 'var(--space-4)' }}>
+                  <div className="card-title" style={{ marginBottom: 'var(--space-4)' }}>New Class</div>
+                  <ErrorMessage message={formError} />
+                  <form onSubmit={handleCreateClass}>
+                    <div className="grid-2">
+                      <div className="form-group">
+                        <label className="form-label">Section</label>
+                        <input type="text" className="form-input" placeholder="e.g. A" value={classForm.section} onChange={e => setClassForm({ ...classForm, section: e.target.value })} required />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Year of Study <span className="form-required">*</span></label>
+                        <select className="form-input" value={classForm.academicYear} onChange={e => setClassForm({ ...classForm, academicYear: e.target.value })} required>
+                          <option value="">Select Year of Study</option>
+                          {YEAR_LEVELS.map((y) => (
+                            <option key={y} value={y}>{y} Year</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
+                      <button type="submit" className="btn btn-primary" disabled={submitting}>
+                        {submitting ? <LoadingSpinner size={16} /> : 'Save Class'}
+                      </button>
+                      <button type="button" className="btn btn-ghost" onClick={() => setShowCreateClass(false)}>Cancel</button>
+                    </div>
+                  </form>
                 </div>
-                <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
-                  <button type="submit" className="btn btn-primary" disabled={submitting}>
-                    {submitting ? <LoadingSpinner size={16} /> : 'Save Class'}
-                  </button>
-                  <button type="button" className="btn btn-ghost" onClick={() => setShowCreateClass(false)}>Cancel</button>
-                </div>
-              </form>
+              )}
+
+              <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 'var(--space-4)' }}>
+                {classes.filter(c => c.department === selectedDepartment.name).map(cls => (
+                  <div key={cls._id} className="card card-sm" style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={() => setSelectedClass(cls)}>
+                    <div>
+                      <div style={{ fontSize: 'var(--text-xl)', fontWeight: 600 }}>{cls.section}</div>
+                      <div style={{ color: 'var(--color-muted)', fontSize: 'var(--text-sm)' }}>Year of Study: {cls.academicYear}</div>
+                    </div>
+                    <button className="btn btn-sm btn-danger btn-icon" onClick={(e) => { e.stopPropagation(); handleDeleteClass(cls._id); }} title="Delete Class">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+                {classes.filter(c => c.department === selectedDepartment.name).length === 0 && (
+                  <div style={{ color: 'var(--color-muted)' }}>No classes found in this department.</div>
+                )}
+              </div>
             </div>
           )}
 
-          <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 'var(--space-4)' }}>
-            {classes.filter(c => c.department === selectedDepartment.name).map(cls => (
-              <div key={cls._id} className="card card-sm" style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={() => setSelectedClass(cls)}>
-                <div>
-                  <div style={{ fontSize: 'var(--text-xl)', fontWeight: 600 }}>{cls.section}</div>
-                  <div style={{ color: 'var(--color-muted)', fontSize: 'var(--text-sm)' }}>Year of Study: {cls.academicYear}</div>
-                </div>
-                <button className="btn btn-sm btn-danger btn-icon" onClick={(e) => { e.stopPropagation(); handleDeleteClass(cls._id); }} title="Delete Class">
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            ))}
-            {classes.filter(c => c.department === selectedDepartment.name).length === 0 && (
-              <div style={{ color: 'var(--color-muted)' }}>No classes found in this department.</div>
-            )}
-          </div>
+          {deptSectionTab === 'faculty' && (
+            <div className="card">
+              <div className="card-title" style={{ marginBottom: 'var(--space-4)' }}>Faculty in {selectedDepartment.name}</div>
+              {facultyLoading ? <LoadingSpinner /> : (
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Status</th>
+                      <th style={{ textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {faculty.map(member => (
+                      <tr key={member._id} style={{ opacity: member.isActive ? 1 : 0.5 }}>
+                        <td>
+                          <div style={{ fontWeight: 500 }}>{member.name}</div>
+                        </td>
+                        <td>{member.email}</td>
+                        <td>
+                          <Badge color={member.isActive ? 'green' : 'red'}>
+                            {member.isActive ? 'Active' : 'Disabled'}
+                          </Badge>
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
+                            <button className="btn btn-sm btn-outline btn-icon" onClick={() => openEditFacultyModal(member)} title="Edit details">
+                              <Edit2 size={16} />
+                            </button>
+                            <button className={`btn btn-sm ${member.isActive ? 'btn-danger' : 'btn-success'}`} onClick={() => handleToggleFaculty(member)}>
+                              {member.isActive ? 'Disable' : 'Enable'}
+                            </button>
+                            <button className="btn btn-sm btn-danger btn-icon" onClick={() => setDeleteFacultyModal(member)} title="Delete Faculty">
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {faculty.length === 0 && (
+                      <tr>
+                        <td colSpan="4" style={{ textAlign: 'center', padding: 'var(--space-6)', color: 'var(--color-muted)' }}>
+                          No faculty assigned to this department yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
         </div>
       )}
 
